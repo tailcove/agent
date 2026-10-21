@@ -1,0 +1,26 @@
+[Unit]
+Description=Tailcove agent
+Documentation=https://tailcove.dev/docs/sending-logs/agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/tailcove-agent -config /etc/tailcove-agent.json run
+Restart=always
+RestartSec=5
+User=tailcove-agent
+Group=tailcove-agent
+# Group access to the logs most distributions keep under /var/log.
+SupplementaryGroups=adm
+StateDirectory=tailcove-agent
+Environment=TAILCOVE_STATE_FILE=/var/lib/tailcove-agent/state.json
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
