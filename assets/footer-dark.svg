@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="112" viewBox="0 0 1200 112" role="img" aria-label="Tailcove. Built by AKCybex. MIT licensed.">
+  <defs>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#C7FFF3"/></linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2DD4BF" stop-opacity="0"/><stop offset="0.5" stop-color="#2DD4BF" stop-opacity="0.85"/><stop offset="1" stop-color="#6366F1" stop-opacity="0"/></linearGradient>
+    <radialGradient id="glow" cx="0.1" cy="0.5" r="0.7"><stop offset="0" stop-color="#2DD4BF" stop-opacity="0.10"/><stop offset="1" stop-color="#2DD4BF" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect x="0.5" y="12.5" width="1199" height="99" rx="18" fill="#0F1413" stroke="#FFFFFF" stroke-opacity="0.09"/>
+  <rect x="0.5" y="12.5" width="1199" height="99" rx="18" fill="url(#glow)"/>
+  <rect x="60" y="11" width="1080" height="2" rx="1" fill="url(#line)"/>
+  <g transform="translate(36 38)">
+    <rect width="48" height="48" rx="11" fill="#A6E3D2"/>
+    <g fill="#0A0A0A"><rect x="10" y="12" width="28" height="7" rx="1.8"/><rect x="20.5" y="19" width="7" height="21" rx="1.8"/><rect x="10" y="30" width="7" height="10" rx="1.8"/><rect x="31" y="30" width="7" height="10" rx="1.8"/></g>
+  </g>
+  <g font-family="ui-sans-serif, -apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif">
+    <text x="102" y="60" font-size="26" font-weight="700" letter-spacing="-0.9" fill="url(#word)">tailcove</text>
+    <text x="102" y="82" font-size="13.5" fill="#7C8785">Log management for developers who ship fast.</text>
+    <text x="1164" y="60" text-anchor="end" font-size="20" font-weight="600" letter-spacing="-0.3" fill="#EDEDEC">Built by AKCybex</text>
+    <text x="1164" y="82" text-anchor="end" font-size="13.5" fill="#7C8785">MIT licensed · tailcove.dev</text>
+  </g>
+</svg>

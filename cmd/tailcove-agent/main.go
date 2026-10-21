@@ -1,0 +1,141 @@
+// Command tailcove-agent follows log files and reports host metrics to Tailcove.
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"runtime"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/tailcove/agent/internal/agent"
+	"github.com/tailcove/agent/internal/config"
+	"github.com/tailcove/agent/internal/sender"
+)
+
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
+const usage = `Usage: tailcove-agent [-config file] <command>
+
+Commands:
+  run       follow the configured log files and report host metrics (default)
+  check     validate the configuration and test the token against the API
+  version   print the version
+
+The configuration is a JSON file (-config, or /etc/tailcove-agent.json when it
+exists) with environment variables on top: TAILCOVE_TOKEN, TAILCOVE_ENDPOINT,
+TAILCOVE_HOST, TAILCOVE_LOG_PATHS (comma separated), TAILCOVE_METRICS (true or
+false), TAILCOVE_METRICS_INTERVAL, TAILCOVE_STATE_FILE.
+`
+
+func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
+	flags := flag.NewFlagSet("tailcove-agent", flag.ContinueOnError)
+	configPath := flags.String("config", "", "path to the JSON configuration file")
+
+	flags.Usage = func() { fmt.Fprint(os.Stderr, usage) }
+
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+
+	command := "run"
+	if flags.NArg() > 0 {
+		command = flags.Arg(0)
+	}
+
+	if command == "version" {
+		fmt.Printf("tailcove-agent %s (%s/%s)\n", version, runtime.GOOS, runtime.GOARCH)
+
+		return 0
+	}
+
+	if command != "run" && command != "check" {
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", command, usage)
+
+		return 2
+	}
+
+	path := *configPath
+	if path == "" {
+		if _, err := os.Stat("/etc/tailcove-agent.json"); err == nil {
+			path = "/etc/tailcove-agent.json"
+		}
+	}
+
+	cfg, err := config.Load(path, os.Hostname)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tailcove-agent: %v\n", err)
+
+		return 1
+	}
+
+	userAgent := "tailcove-agent/" + version
+	post := sender.New(cfg.Endpoint, cfg.Token, userAgent)
+	post.Logf = log.Printf
+
+	if command == "check" {
+		return check(cfg)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	log.Printf("tailcove-agent %s sending to %s as host %q (%d log source(s), metrics %v)", version, cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled())
+
+	(&agent.Agent{Config: cfg, Sender: post, State: agent.LoadState(cfg.StateFile), Logf: log.Printf}).Run(ctx)
+
+	log.Print("stopped")
+
+	return 0
+}
+
+// check posts an empty batch, which the API authenticates and accepts without
+// storing anything, and says what it learned.
+func check(cfg config.Config) int {
+	fmt.Printf("endpoint %s, host %q, %d log source(s), metrics %v\n", cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled())
+
+	request, err := http.NewRequest(http.MethodPost, cfg.Endpoint+"/api/v1/logs", strings.NewReader("[]"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tailcove-agent: %v\n", err)
+
+		return 1
+	}
+
+	request.Header.Set("Authorization", "Bearer "+cfg.Token)
+	request.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	response, err := client.Do(request)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not reach the API (is the endpoint right, and is the network open?)")
+
+		return 1
+	}
+
+	defer response.Body.Close()
+
+	switch {
+	case response.StatusCode >= 200 && response.StatusCode < 300:
+		fmt.Println("ok: the API accepted the token")
+
+		return 0
+	case response.StatusCode == http.StatusUnauthorized:
+		fmt.Fprintln(os.Stderr, "the API refused the token (HTTP 401): copy it again from the source's settings")
+	default:
+		fmt.Fprintf(os.Stderr, "the API answered HTTP %d\n", response.StatusCode)
+	}
+
+	return 1
+}

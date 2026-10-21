@@ -1,0 +1,13 @@
+{
+  "token": "YOUR_SOURCE_TOKEN",
+  "logs": [
+    { "path": "/var/log/nginx/*.log" },
+    { "path": "/var/log/myapp/app.log", "from_beginning": false }
+  ],
+  "metrics": {
+    "enabled": true,
+    "interval_seconds": 30,
+    "exclude_interfaces": ["lo", "veth*", "docker*", "br-*"],
+    "exclude_mounts": ["/boot/efi"]
+  }
+}

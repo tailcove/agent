@@ -1,0 +1,33 @@
+version: 2
+
+project_name: tailcove-agent
+
+builds:
+  - main: ./cmd/tailcove-agent
+    binary: tailcove-agent
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "tailcove-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - tailcove-agent.example.json
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  extra_files:
+    - glob: install.sh
+    - glob: packaging/tailcove-agent.service
+
+changelog:
+  disable: true
