@@ -1,4 +1,4 @@
-<a href="https://tailcove.dev/docs/sending-logs/agent"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/agent-dark.svg"><source media="(prefers-color-scheme: light)" srcset="assets/agent-light.svg"><img alt="tailcove-agent: Tailcove for the agent. One static binary that sends logs and host metrics." src="assets/agent-dark.svg" width="100%"></picture></a>
+<a href="https://tailcove.dev/docs/sending-logs/agent"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/agent-dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/agent-light.svg"><img alt="tailcove-agent: Tailcove for the agent. Version, runtime support, size and license." src="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/agent-dark.svg" width="100%"></picture></a>
 
 <p align="center">
   <a href="https://tailcove.dev/docs/sending-logs/agent">Documentation</a> &nbsp;·&nbsp;
@@ -10,9 +10,9 @@
 <h3 align="center">Send your server's logs and host metrics to Tailcove with one small program.</h3>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/features-agent-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="assets/features-agent-light.svg">
-  <img alt="tailcove-agent features" src="assets/features-agent-dark.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/features-agent-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/features-agent-light.svg">
+  <img alt="tailcove-agent features" src="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/features-agent-dark.svg" width="100%">
 </picture>
 
 ## Install
@@ -104,12 +104,18 @@ Pushing a `v*` tag runs the publish workflow: it builds the Linux binaries,
 attaches them to a GitHub release with `checksums.txt` and `install.sh`, and
 pushes `ghcr.io/tailcove/agent`. No registry token is stored anywhere.
 
+## Help and feedback
+
+- **Docs:** [tailcove.dev/docs/sending-logs/agent](https://tailcove.dev/docs/sending-logs/agent)
+- **Bugs and feature requests:** [open an issue](https://github.com/tailcove/agent/issues/new/choose)
+- **Security problems:** please email **security@tailcove.dev** instead of opening a public issue.
+
 <br>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/footer-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="assets/footer-light.svg">
-  <img alt="Tailcove. Built by AKCybex." src="assets/footer-dark.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/footer-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/footer-light.svg">
+  <img alt="Tailcove. Built by AKCybex." src="https://raw.githubusercontent.com/tailcove/.github/main/profile/assets/packages/footer-dark.svg" width="100%">
 </picture>
 
 <p align="center">
