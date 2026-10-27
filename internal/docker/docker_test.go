@@ -601,3 +601,30 @@ func TestReaderStopsStreamsWhenTheContextEnds(t *testing.T) {
 		t.Fatal("the reader did not stop")
 	}
 }
+
+func TestTheCursorEndsAtTheLatestLineWhicheverStreamIsSentLast(t *testing.T) {
+	multiline, _ := tail.NewMultiline(tail.MultilineAuto, "", 0, 0, 30*time.Millisecond)
+
+	for round := 0; round < 5; round++ {
+		engine := &fakeEngine{
+			containers: []Container{{ID: id1, Name: "app"}},
+			logs: map[string]string{id1: string(frame(1, stamped("2026-10-27T10:00:00Z", "plain line"))) +
+				string(frame(2, stamped("2026-10-27T10:00:01Z", "error line")))},
+		}
+		out := &sink{}
+		reader := &Reader{Client: engine, FromBeginning: true, Multiline: multiline, Emit: out.emit, Now: time.Now}
+
+		stop := runReader(t, reader)
+
+		waitFor(t, "both events", func() bool { return out.count() >= 2 })
+		stop()
+
+		out.mu.Lock()
+		last := out.events[len(out.events)-1].Cursor
+		out.mu.Unlock()
+
+		if last != "2026-10-27T10:00:01Z" {
+			t.Fatalf("round %d: the last cursor is %s, want the time of the latest line", round, last)
+		}
+	}
+}
