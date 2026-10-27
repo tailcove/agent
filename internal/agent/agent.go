@@ -12,14 +12,19 @@ import (
 	"github.com/tailcove/agent/internal/config"
 	"github.com/tailcove/agent/internal/hostmetrics"
 	"github.com/tailcove/agent/internal/sender"
+	"github.com/tailcove/agent/internal/source"
 	"github.com/tailcove/agent/internal/tail"
 )
 
-// item is a line ready to send, with where in its file it ended.
+// item is a line ready to send, with where in its file (or, for a stream that
+// has no file, which cursor) it ended.
 type item struct {
 	file     string
 	position tail.Position
 	entry    json.RawMessage
+
+	cursorKey string
+	cursor    string
 }
 
 const (
@@ -57,7 +62,7 @@ func (a *Agent) Run(ctx context.Context) {
 
 	var group sync.WaitGroup
 
-	if len(a.Config.Logs) > 0 || a.Kube != nil {
+	if len(a.Config.Logs) > 0 || a.Kube != nil || a.Config.Journald.Enabled || a.Config.Docker.Enabled {
 		group.Add(1)
 
 		go func() {
@@ -110,16 +115,30 @@ func (a *Agent) runLogs(ctx context.Context) {
 	}
 
 	lines := make(chan tail.Line, lineQueueLength)
+	events := make(chan source.Event, lineQueueLength)
 	follower := &tail.Follower{Sources: sources, Resume: a.State.Positions(), Lines: lines, Gone: a.forgetFile}
+
+	var readers sync.WaitGroup
+
+	emit := func(event source.Event) {
+		select {
+		case events <- event:
+		case <-ctx.Done():
+		}
+	}
+
+	a.startJournald(ctx, emit, &readers)
+	a.startDocker(ctx, emit, &readers)
 
 	followed := make(chan struct{})
 
 	go func() {
 		follower.Run(ctx)
+		readers.Wait()
 		close(followed)
 	}()
 
-	a.routeLines(ctx, lines, followed)
+	a.routeLines(ctx, lines, events, followed)
 }
 
 // forgetFile drops what is saved of a file that was removed (a pod that was
@@ -142,7 +161,7 @@ type sink struct {
 // a routed sink that cannot keep up drops what does not fit, says so once, and
 // the dropped lines are read again at the next start (their file position was
 // never recorded).
-func (a *Agent) routeLines(ctx context.Context, lines <-chan tail.Line, followed <-chan struct{}) {
+func (a *Agent) routeLines(ctx context.Context, lines <-chan tail.Line, events <-chan source.Event, followed <-chan struct{}) {
 	var (
 		group sync.WaitGroup
 		sinks = map[string]*sink{}
@@ -199,6 +218,15 @@ func (a *Agent) routeLines(ctx context.Context, lines <-chan tail.Line, followed
 		}
 	}
 
+	deliverEvent := func(event source.Event) {
+		queued := item{entry: event.Entry, cursorKey: event.Key, cursor: event.Cursor}
+
+		select {
+		case sinks[""].items <- queued:
+		case <-ctx.Done():
+		}
+	}
+
 	prune := time.NewTicker(pruneEvery)
 	defer prune.Stop()
 
@@ -206,6 +234,8 @@ func (a *Agent) routeLines(ctx context.Context, lines <-chan tail.Line, followed
 		select {
 		case line := <-lines:
 			deliver(line)
+		case event := <-events:
+			deliverEvent(event)
 		case <-prune.C:
 			if a.Kube != nil {
 				a.State.PruneMissing(strings.TrimRight(a.Kube.PodsDir(), "/") + "/")
@@ -217,6 +247,8 @@ func (a *Agent) routeLines(ctx context.Context, lines <-chan tail.Line, followed
 				select {
 				case line := <-lines:
 					deliver(line)
+				case event := <-events:
+					deliverEvent(event)
 				default:
 					drained = true
 				}
@@ -249,8 +281,22 @@ func (a *Agent) batchLines(ctx context.Context, post *sender.Sender, items <-cha
 	var (
 		entries   []json.RawMessage
 		positions = map[string]tail.Position{}
+		cursors   = map[string]string{}
 		size      int
 	)
+
+	take := func(queued item) {
+		entries = append(entries, queued.entry)
+		size += len(queued.entry)
+
+		if queued.file != "" {
+			positions[queued.file] = queued.position
+		}
+
+		if queued.cursorKey != "" {
+			cursors[queued.cursorKey] = queued.cursor
+		}
+	}
 
 	timer := time.NewTicker(flushInterval)
 	saver := time.NewTicker(stateSaveEvery)
@@ -276,15 +322,17 @@ func (a *Agent) batchLines(ctx context.Context, post *sender.Sender, items <-cha
 			a.State.Record(file, position)
 		}
 
-		entries, positions, size = nil, map[string]tail.Position{}, 0
+		for key, cursor := range cursors {
+			a.State.RecordCursor(key, cursor)
+		}
+
+		entries, positions, cursors, size = nil, map[string]tail.Position{}, map[string]string{}, 0
 	}
 
 	for {
 		select {
 		case queued := <-items:
-			entries = append(entries, queued.entry)
-			positions[queued.file] = queued.position
-			size += len(queued.entry)
+			take(queued)
 
 			if len(entries) >= maxBatchLines || size >= maxBatchBytes {
 				flush(ctx)
@@ -302,8 +350,7 @@ func (a *Agent) batchLines(ctx context.Context, post *sender.Sender, items <-cha
 			for {
 				select {
 				case queued := <-items:
-					entries = append(entries, queued.entry)
-					positions[queued.file] = queued.position
+					take(queued)
 
 					if len(entries) >= maxBatchLines {
 						flush(grace)

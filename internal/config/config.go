@@ -108,6 +108,8 @@ type Config struct {
 	Logs       []LogSource `json:"logs"`
 	Metrics    Metrics     `json:"metrics"`
 	Kubernetes Kubernetes  `json:"kubernetes"`
+	Journald   Journald    `json:"journald"`
+	Docker     Docker      `json:"docker"`
 }
 
 // MetricsEnabled reports whether host metrics are collected (on by default).
@@ -177,6 +179,8 @@ func load(path string, hostname func() (string, error)) (Config, error) {
 	}
 
 	cfg.Kubernetes.applyDefaults(cfg.Metrics.IntervalSeconds, hostname)
+	cfg.Journald.applyDefaults()
+	cfg.Docker.applyDefaults()
 
 	if cfg.Host == "" && hostname != nil {
 		if name, err := hostname(); err == nil {
@@ -236,6 +240,10 @@ func applyEnv(cfg *Config, get func(string) string) error {
 		return err
 	}
 
+	if err := applyContainerEnv(cfg, get); err != nil {
+		return err
+	}
+
 	if v := get("TAILCOVE_PROC_ROOT"); v != "" {
 		cfg.Metrics.ProcRoot = v
 	}
@@ -291,14 +299,22 @@ func (c Config) Validate() error {
 		}
 	}
 
-	if len(c.Logs) == 0 && !c.MetricsEnabled() && !c.Kubernetes.Enabled {
-		return errors.New("nothing to do: no log files are configured, metrics are off and Kubernetes discovery is off")
+	if len(c.Logs) == 0 && !c.MetricsEnabled() && !c.Kubernetes.Enabled && !c.Journald.Enabled && !c.Docker.Enabled {
+		return errors.New("nothing to do: no log files are configured, metrics are off, and Kubernetes, journald and Docker are off")
 	}
 
 	for i, source := range c.Logs {
 		if err := validateMultiline(source.Multiline); err != nil {
 			return fmt.Errorf("logs entry %d: %w", i+1, err)
 		}
+	}
+
+	if err := c.Journald.validate(); err != nil {
+		return err
+	}
+
+	if err := c.Docker.validate(); err != nil {
+		return err
 	}
 
 	return c.Kubernetes.validate()

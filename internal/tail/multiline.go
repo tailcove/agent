@@ -93,6 +93,7 @@ type event struct {
 	text      strings.Builder
 	lines     int
 	first     time.Time
+	lastAt    time.Time // when the last line happened (its own time)
 	last      time.Time // when the last line was added (the clock, for the idle timeout)
 	stream    string
 	offset    int64
@@ -136,6 +137,7 @@ func (e *event) add(text string, at time.Time, now time.Time, stream string, off
 	e.text.WriteString(text)
 	e.lines++
 	e.last = now
+	e.lastAt = at
 	e.offset = offset
 
 	switch {
