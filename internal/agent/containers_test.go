@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -288,7 +289,16 @@ func TestDockerLogsAreDeliveredWithTheirContainerAndDoNotRepeatAfterARestart(t *
 	waitUntil(t, "the new line", func() bool { return recorded.count("main-token") >= 3 })
 	time.Sleep(200 * time.Millisecond)
 
-	if got := messages(recorded); strings.Join(got, "|") != "listening on :8080|payment failed|after the restart" {
+	// Nothing was sent twice and nothing was lost. The two streams of one container are joined separately,
+	// so the order between them is not defined; the line written after the restart comes last.
+	got := messages(recorded)
+	if len(got) != 3 || got[2] != "after the restart" {
+		t.Errorf("messages %v", got)
+	}
+
+	sort.Strings(got)
+
+	if strings.Join(got, "|") != "after the restart|listening on :8080|payment failed" {
 		t.Errorf("messages %v", got)
 	}
 
