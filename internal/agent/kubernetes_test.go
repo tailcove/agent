@@ -300,6 +300,9 @@ func TestAPodThatRestartsContinuesInItsNewFileAndARestartOfTheAgentDoesNotRepeat
 	appendTo(t, second, cri("stdout", "after restart"))
 
 	waitUntil(t, "the line of the new file", func() bool { return recorded.count("main-token") >= 2 })
+
+	// The position is recorded once the batch is accepted; stopping before that would (rightly) send the line again.
+	waitUntil(t, "the position of the new file", func() bool { return run.agent.State.Positions()[second].Offset > 0 })
 	run.stop()
 
 	// The agent restarts: nothing delivered is sent again, what came later is.

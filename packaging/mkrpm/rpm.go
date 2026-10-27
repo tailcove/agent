@@ -82,6 +82,13 @@ const (
 	tagPayloadCompress = 1125
 	tagPayloadFlags    = 1126
 	tagFileDigestAlgo  = 5011
+	tagPayloadDigest   = 5092
+	tagPayloadDigestAl = 5093
+
+	// Regions: the tags a header was written with, which rpm keeps byte for byte
+	// when it stores the header, so that its digests still match afterwards.
+	regionSignature = 62
+	regionImmutable = 63
 )
 
 // File flags.
@@ -155,7 +162,7 @@ func Build(pkg Package) ([]byte, error) {
 		return nil, err
 	}
 
-	header, err := mainHeader(pkg, entries, built, payloadSize)
+	header, err := mainHeader(pkg, entries, built, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -242,8 +249,10 @@ func pad(out *bytes.Buffer, length int) {
 
 // header builds the binary header structure: magic, index and data store.
 type header struct {
-	tags    []headerEntry
-	aligned bool
+	tags []headerEntry
+	// region is the tag of the immutable region that covers every entry (62 for
+	// the signature header, 63 for the main one).
+	region uint32
 }
 
 type headerEntry struct {
@@ -297,13 +306,30 @@ func (h *header) addBin(tag uint32, data []byte) {
 }
 
 // bytes returns the encoded header. Tags are sorted, and each value starts at
-// the alignment its type needs.
+// the alignment its type needs. With a region, the first index entry is the
+// region tag and a 16 byte trailer closes the data store: its offset is minus the
+// size of the index that the region covers, which is how rpm tells that the
+// header it reads is whole.
 func (h *header) bytes() []byte {
 	sort.Slice(h.tags, func(i, j int) bool { return h.tags[i].tag < h.tags[j].tag })
 
 	var store bytes.Buffer
 
-	index := make([]byte, 0, 16*len(h.tags))
+	entries := len(h.tags)
+	if h.region != 0 {
+		entries++
+	}
+
+	index := make([]byte, 0, 16*entries)
+
+	appendEntry := func(tag, kind, offset, count uint32) {
+		var one [16]byte
+		binary.BigEndian.PutUint32(one[0:], tag)
+		binary.BigEndian.PutUint32(one[4:], kind)
+		binary.BigEndian.PutUint32(one[8:], offset)
+		binary.BigEndian.PutUint32(one[12:], count)
+		index = append(index, one[:]...)
+	}
 
 	for _, entry := range h.tags {
 		switch entry.kind {
@@ -317,14 +343,26 @@ func (h *header) bytes() []byte {
 			}
 		}
 
-		var one [16]byte
-		binary.BigEndian.PutUint32(one[0:], entry.tag)
-		binary.BigEndian.PutUint32(one[4:], entry.kind)
-		binary.BigEndian.PutUint32(one[8:], uint32(store.Len()))
-		binary.BigEndian.PutUint32(one[12:], entry.count)
-		index = append(index, one[:]...)
-
+		appendEntry(entry.tag, entry.kind, uint32(store.Len()), entry.count)
 		store.Write(entry.data)
+	}
+
+	if h.region != 0 {
+		trailerOffset := store.Len()
+
+		var trailer [16]byte
+		binary.BigEndian.PutUint32(trailer[0:], h.region)
+		binary.BigEndian.PutUint32(trailer[4:], typeBin)
+		binary.BigEndian.PutUint32(trailer[8:], uint32(-int32(16*entries)))
+		binary.BigEndian.PutUint32(trailer[12:], 16)
+		store.Write(trailer[:])
+
+		// The region entry sorts before every other tag (62 and 63 are the smallest).
+		region := make([]byte, 0, 16)
+		saved := index
+		index = region
+		appendEntry(h.region, typeBin, uint32(trailerOffset), 16)
+		index = append(index, saved...)
 	}
 
 	var out bytes.Buffer
@@ -332,7 +370,7 @@ func (h *header) bytes() []byte {
 	out.Write([]byte{0x8e, 0xad, 0xe8, 0x01, 0, 0, 0, 0})
 
 	var counts [8]byte
-	binary.BigEndian.PutUint32(counts[0:], uint32(len(h.tags)))
+	binary.BigEndian.PutUint32(counts[0:], uint32(entries))
 	binary.BigEndian.PutUint32(counts[4:], uint32(store.Len()))
 	out.Write(counts[:])
 	out.Write(index)
@@ -351,7 +389,7 @@ func signatureHeader(main, payload []byte, payloadSize int) []byte {
 	sha1Sum := sha1.Sum(main)
 	sha256Sum := sha256.Sum256(main)
 
-	var h header
+	h := header{region: regionSignature}
 
 	h.addInt32(tagSigSize, uint32(len(main)+len(payload)))
 	h.addBin(tagSigMD5, whole.Sum(nil))
@@ -368,8 +406,8 @@ func signatureHeader(main, payload []byte, payloadSize int) []byte {
 	return encoded
 }
 
-func mainHeader(pkg Package, entries []Entry, built time.Time, payloadSize int) ([]byte, error) {
-	var h header
+func mainHeader(pkg Package, entries []Entry, built time.Time, payload []byte) ([]byte, error) {
+	h := header{region: regionImmutable}
 
 	h.addStrings(tagI18NTable, []string{"C"})
 	h.addString(tagName, pkg.Name)
@@ -408,6 +446,11 @@ func mainHeader(pkg Package, entries []Entry, built time.Time, payloadSize int) 
 	h.addString(tagPayloadFormat, "cpio")
 	h.addString(tagPayloadCompress, "gzip")
 	h.addString(tagPayloadFlags, "9")
+
+	// What a current rpm checks the compressed payload against.
+	payloadSum := sha256.Sum256(payload)
+	h.addStrings(tagPayloadDigest, []string{hex.EncodeToString(payloadSum[:])})
+	h.addInt32(tagPayloadDigestAl, 8)
 
 	for _, script := range []struct {
 		body, program uint32

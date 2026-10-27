@@ -2,6 +2,7 @@ package hostmetrics
 
 import (
 	"math"
+	"runtime"
 	"testing"
 )
 
@@ -133,7 +134,12 @@ func TestParseUptime(t *testing.T) {
 }
 
 func TestExcludePatterns(t *testing.T) {
-	if !matchesAny(DefaultExcludedInterfaces, "veth1a2b3c") || !matchesAny(DefaultExcludedInterfaces, "lo") || matchesAny(DefaultExcludedInterfaces, "eth0") {
+	loopback, virtual := "lo", "veth1a2b3c"
+	if runtime.GOOS == "darwin" {
+		loopback, virtual = "lo0", "utun3"
+	}
+
+	if !matchesAny(DefaultExcludedInterfaces, virtual) || !matchesAny(DefaultExcludedInterfaces, loopback) || matchesAny(DefaultExcludedInterfaces, "eth0") || matchesAny(DefaultExcludedInterfaces, "en0") {
 		t.Error("default interface exclusions are wrong")
 	}
 }
