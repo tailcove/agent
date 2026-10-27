@@ -102,6 +102,8 @@ func TestJournaldEntriesAreDeliveredAndTheCursorSurvivesARestart(t *testing.T) {
 
 	waitUntil(t, "two entries", func() bool { return recorded.count("main-token") >= 2 })
 
+	waitUntil(t, "the cursor to be recorded", func() bool { return run.agent.State.Cursor("journald") == "c2" })
+
 	entries := recorded.entries("main-token")
 
 	if entries[0]["message"] != "service started" || entries[0]["level"] != "info" || entries[0]["host"] != "web-1" || entries[1]["level"] != "warning" {
@@ -249,9 +251,10 @@ func TestDockerLogsAreDeliveredWithTheirContainerAndDoNotRepeatAfterARestart(t *
 		t.Errorf("JSON entry %v", entries[1])
 	}
 
-	run.stop()
-
 	key := "docker:dddddddddddd0000000000000000000000000000000000000000000000000000"
+
+	waitUntil(t, "the cursor to be recorded", func() bool { return run.agent.State.Cursor(key) == "2026-10-27T10:00:01Z" })
+	run.stop()
 
 	if got := LoadState(statePath).Cursor(key); got != "2026-10-27T10:00:01Z" {
 		t.Fatalf("saved cursor %q", got)

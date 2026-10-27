@@ -66,7 +66,7 @@ jobs:
         run: |
           set -eu
           sudo dpkg -i packages/tailcove-agent_*_amd64.deb
-          grep -q ci-token /etc/tailcove-agent.json
+          sudo grep -q ci-token /etc/tailcove-agent.json
       - name: Remove and purge
         run: |
           set -eu
@@ -115,7 +115,7 @@ jobs:
           set -eu
           sed -i 's/YOUR_SOURCE_TOKEN/ci-token/' /etc/tailcove-agent.json
           rpm -U --nodeps --replacepkgs packages/tailcove-agent-*.x86_64.rpm
-          grep -q ci-token /etc/tailcove-agent.json
+          sudo grep -q ci-token /etc/tailcove-agent.json
       - name: Remove
         run: |
           set -eu
