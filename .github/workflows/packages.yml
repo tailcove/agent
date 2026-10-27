@@ -1,0 +1,124 @@
+name: packages
+
+# Builds the .deb and .rpm packages and installs them for real: the .deb on the
+# runner, the .rpm in Fedora, AlmaLinux and openSUSE containers. Called by ci.yml on
+# every change, and by publish.yml before a release is made, so a package that
+# does not install is found before anyone downloads it.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version to build (a v prefix and a prerelease such as -rc.0 are fine).
+        type: string
+        default: 0.0.0-ci
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Package builder tests
+        run: go test -race -count=1 ./packaging/...
+      - name: Package tests (contents and maintainer scripts)
+        run: sh tests/package_test.sh
+      - name: Build
+        run: sh packaging/build-packages.sh "${{ inputs.version }}" dist/packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/packages/*
+          if-no-files-found: error
+
+  deb:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: packages
+      - name: Install
+        run: |
+          set -eu
+          sudo dpkg -i packages/tailcove-agent_*_amd64.deb
+          tailcove-agent version
+          id tailcove-agent
+          test -f /etc/tailcove-agent.json
+          test "$(stat -c %a /etc/tailcove-agent.json)" = 640
+          systemctl cat tailcove-agent >/dev/null
+          # Without a token the service is not started, and says so.
+          ! systemctl is-active --quiet tailcove-agent
+      - name: Configure and start
+        run: |
+          set -eu
+          # A token that is not real, and an endpoint on this machine: nothing leaves the runner.
+          sudo sed -i 's|"token": "YOUR_SOURCE_TOKEN",|"token": "ci-token", "endpoint": "http://127.0.0.1:9",|' /etc/tailcove-agent.json
+          sudo systemctl start tailcove-agent
+          sleep 2
+          systemctl is-active tailcove-agent
+      - name: Upgrade keeps the configuration
+        run: |
+          set -eu
+          sudo dpkg -i packages/tailcove-agent_*_amd64.deb
+          grep -q ci-token /etc/tailcove-agent.json
+      - name: Remove and purge
+        run: |
+          set -eu
+          sudo dpkg -r tailcove-agent
+          test -f /etc/tailcove-agent.json
+          ! test -e /usr/bin/tailcove-agent
+          sudo dpkg -P tailcove-agent
+          ! test -e /etc/tailcove-agent.json
+          ! id tailcove-agent 2>/dev/null
+
+  rpm:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['fedora:latest', 'almalinux:9', 'opensuse/leap:15.6']
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: packages
+      - name: Prepare
+        run: |
+          if command -v dnf >/dev/null 2>&1; then dnf install -y shadow-utils findutils; else zypper --non-interactive install shadow findutils; fi
+      - name: The package is well formed
+        run: |
+          set -eu
+          rpm -qpi packages/tailcove-agent-*.x86_64.rpm
+          rpm -qpl packages/tailcove-agent-*.x86_64.rpm
+          rpm -qp --scripts packages/tailcove-agent-*.x86_64.rpm | grep -q tc_post_install
+          rpm -K packages/tailcove-agent-*.x86_64.rpm
+      - name: Install
+        run: |
+          set -eu
+          rpm -i --nodeps packages/tailcove-agent-*.x86_64.rpm
+          tailcove-agent version
+          id tailcove-agent
+          test -f /etc/tailcove-agent.json
+          test "$(stat -c %a /etc/tailcove-agent.json)" = 640
+          rpm -V tailcove-agent
+          rpm -q --whatprovides tailcove-agent
+      - name: Upgrade keeps the configuration
+        run: |
+          set -eu
+          sed -i 's/YOUR_SOURCE_TOKEN/ci-token/' /etc/tailcove-agent.json
+          rpm -U --nodeps --replacepkgs packages/tailcove-agent-*.x86_64.rpm
+          grep -q ci-token /etc/tailcove-agent.json
+      - name: Remove
+        run: |
+          set -eu
+          rpm -e tailcove-agent
+          ! test -e /usr/bin/tailcove-agent
+          test -f /etc/tailcove-agent.json
