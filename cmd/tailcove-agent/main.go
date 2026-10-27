@@ -40,6 +40,11 @@ false), TAILCOVE_METRICS_INTERVAL, TAILCOVE_STATE_FILE.
 On a Kubernetes node (a DaemonSet), TAILCOVE_KUBERNETES=true follows every pod's
 logs under /var/log/pods and reports container and pod CPU and memory; the
 "kubernetes" block of the configuration file tunes it (see the docs).
+
+TAILCOVE_JOURNALD=true follows systemd's journal (through journalctl), and
+TAILCOVE_DOCKER=true follows the logs of the containers on this host through the
+Docker socket. The Docker socket is root-equivalent for whoever can write to it,
+so it is off unless asked for; the agent only reads container logs through it.
 `
 
 func main() {
@@ -102,7 +107,7 @@ func run(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Printf("tailcove-agent %s sending to %s as host %q (%d log source(s), metrics %v, kubernetes %v)", version, cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled(), cfg.Kubernetes.Enabled)
+	log.Printf("tailcove-agent %s sending to %s as host %q (%d log source(s), metrics %v, kubernetes %v, journald %v, docker %v)", version, cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled(), cfg.Kubernetes.Enabled, cfg.Journald.Enabled, cfg.Docker.Enabled)
 
 	running := &agent.Agent{Config: cfg, Sender: post, State: agent.LoadState(cfg.StateFile), Logf: log.Printf}
 
@@ -151,7 +156,11 @@ func runProbe(configPath string) int {
 // check posts an empty batch, which the API authenticates and accepts without
 // storing anything, and says what it learned.
 func check(cfg config.Config) int {
-	fmt.Printf("endpoint %s, host %q, %d log source(s), metrics %v, kubernetes %v\n", cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled(), cfg.Kubernetes.Enabled)
+	fmt.Printf("endpoint %s, host %q, %d log source(s), metrics %v, kubernetes %v, journald %v, docker %v\n", cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled(), cfg.Kubernetes.Enabled, cfg.Journald.Enabled, cfg.Docker.Enabled)
+
+	if cfg.Docker.Enabled {
+		fmt.Printf("docker: reading container logs through %s; access to that socket is root-equivalent, and this agent only reads logs through it\n", cfg.Docker.Socket)
+	}
 
 	request, err := http.NewRequest(http.MethodPost, cfg.Endpoint+"/api/v1/logs", strings.NewReader("[]"))
 	if err != nil {

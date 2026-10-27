@@ -4,6 +4,15 @@
     { "path": "/var/log/nginx/*.log" },
     { "path": "/var/log/myapp/app.log", "from_beginning": false }
   ],
+  "journald": {
+    "enabled": false,
+    "units": ["nginx.service"],
+    "min_priority": "info"
+  },
+  "docker": {
+    "enabled": false,
+    "exclude": ["tailcove-agent"]
+  },
   "metrics": {
     "enabled": true,
     "interval_seconds": 30,

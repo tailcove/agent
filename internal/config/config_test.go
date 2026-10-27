@@ -210,3 +210,101 @@ func TestKubernetesEnvironmentLists(t *testing.T) {
 		t.Fatalf("unexpected: %+v", cfg.Kubernetes)
 	}
 }
+
+func TestJournaldAndDockerAreOffByDefaultAndHaveDefaults(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "abc")
+
+	cfg, err := Load(write(t, `{"journald":{"enabled":true},"docker":{"enabled":true}}`), host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Journald.Path != "journalctl" || cfg.Journald.MinPriority != "debug" || cfg.Docker.Socket != DefaultDockerSocket || cfg.Docker.Host != "container" || cfg.Docker.MaxContainers != DefaultDockerMaxContainers {
+		t.Fatalf("unexpected defaults: %+v %+v", cfg.Journald, cfg.Docker)
+	}
+
+	plain, err := Load(write(t, `{"logs":[{"path":"/a.log"}]}`), host)
+	if err != nil || plain.Journald.Enabled || plain.Docker.Enabled {
+		t.Fatalf("should be off: %+v %v", plain, err)
+	}
+}
+
+func TestJournaldOrDockerCanBeTheOnlyThingConfigured(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "abc")
+	t.Setenv("TAILCOVE_METRICS", "false")
+
+	for _, name := range []string{"TAILCOVE_JOURNALD", "TAILCOVE_DOCKER"} {
+		t.Setenv("TAILCOVE_JOURNALD", "")
+		t.Setenv("TAILCOVE_DOCKER", "")
+		t.Setenv(name, "true")
+
+		if _, err := Load("", host); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestJournaldAndDockerSettingsAreValidated(t *testing.T) {
+	cases := map[string]string{
+		`{"journald":{"enabled":true,"min_priority":"loud"}}`:          "min_priority",
+		`{"journald":{"enabled":true,"units":["--root=/x"]}}`:          "unit",
+		`{"journald":{"enabled":true,"units":["a b"]}}`:                "unit",
+		`{"journald":{"enabled":true,"path":"bin/journalctl"}}`:        "path",
+		`{"journald":{"enabled":true,"directory":"relative"}}`:         "directory",
+		`{"docker":{"enabled":true,"socket":"docker.sock"}}`:           "socket",
+		`{"docker":{"enabled":true,"host":"cluster"}}`:                 "host",
+		`{"docker":{"enabled":true,"labels":["bad key"]}}`:             "label key",
+		`{"docker":{"enabled":true,"max_containers":100000}}`:          "max_containers",
+		`{"docker":{"enabled":true,"multiline":{"mode":"sometimes"}}}`: "multiline mode",
+	}
+
+	for body, want := range cases {
+		t.Setenv("TAILCOVE_TOKEN", "abc")
+
+		if _, err := Load(write(t, body), host); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: want error containing %q, got %v", body, want, err)
+		}
+	}
+
+	// What is not enabled is not checked.
+	if _, err := Load(write(t, `{"logs":[{"path":"/a"}],"docker":{"socket":"relative"},"journald":{"min_priority":"loud"}}`), host); err != nil {
+		t.Errorf("disabled settings were validated: %v", err)
+	}
+}
+
+func TestJournaldAndDockerEnvironment(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "abc")
+	t.Setenv("TAILCOVE_JOURNALD", "1")
+	t.Setenv("TAILCOVE_JOURNALD_UNITS", "nginx.service, sshd*")
+	t.Setenv("TAILCOVE_JOURNALD_MIN_PRIORITY", "warning")
+	t.Setenv("TAILCOVE_DOCKER", "true")
+	t.Setenv("TAILCOVE_DOCKER_SOCKET", "/run/podman/podman.sock")
+	t.Setenv("TAILCOVE_DOCKER_EXCLUDE", "tailcove-agent, *-canary")
+	t.Setenv("TAILCOVE_DOCKER_HOST", "service")
+
+	cfg, err := Load("", host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !cfg.Journald.Enabled || len(cfg.Journald.Units) != 2 || cfg.Journald.Units[1] != "sshd*" || cfg.Journald.MinPriority != "warning" {
+		t.Errorf("journald %+v", cfg.Journald)
+	}
+
+	if !cfg.Docker.Enabled || cfg.Docker.Socket != "/run/podman/podman.sock" || len(cfg.Docker.Exclude) != 2 || cfg.Docker.Host != "service" {
+		t.Errorf("docker %+v", cfg.Docker)
+	}
+}
+
+func TestJournaldAndDockerFlagsAreParsedStrictly(t *testing.T) {
+	for _, name := range []string{"TAILCOVE_JOURNALD", "TAILCOVE_DOCKER", "TAILCOVE_DOCKER_FROM_BEGINNING"} {
+		t.Setenv("TAILCOVE_TOKEN", "abc")
+		t.Setenv(name, "yes")
+
+		if _, err := Load("", host); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s=yes should be refused, got %v", name, err)
+		}
+
+		t.Setenv(name, "")
+	}
+}

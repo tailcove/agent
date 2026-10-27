@@ -79,6 +79,37 @@ probe endpoints. A probe follows no log files and sends no host metrics. It refu
 loopback, link-local and other non-public addresses, at the moment of connecting, and sends a monitor's headers and
 body only to the host the monitor names. It holds no other credential.
 
+## Journald, Docker and Kubernetes
+
+**journald** (Linux with systemd). `"journald": {"enabled": true}` or
+`TAILCOVE_JOURNALD=true` follows the journal through `journalctl`, which is
+read-only and already on the machine, so there is no library to install. Each
+entry becomes a log line with its level (from the syslog priority), time, host
+and a `journald` context (unit, identifier, pid). Limit it with `units`
+(`["nginx.service", "sshd*"]`) and `min_priority` (`warning` sends warnings and
+worse). The journal's cursor is saved, so a restart continues after the last
+delivered entry. The service user must be allowed to read the journal: the
+packages add it to the `systemd-journal` group.
+
+**Docker.** `"docker": {"enabled": true}` or `TAILCOVE_DOCKER=true` follows the
+logs of every running container through `/var/run/docker.sock`
+(`TAILCOVE_DOCKER_SOCKET` for another). **Access to that socket is
+root-equivalent for whoever can write to it**, which is why it is off by
+default; the agent itself only lists containers, inspects one and reads its
+logs, never starts, stops or runs anything. Entries carry the container, image
+and Compose project and service in a `docker` context; `host` is the container
+(or `"host": "host"` for this machine, `"service"` for the Compose service).
+`include` and `exclude` take container name globs, `labels` names labels to
+keep, and stack traces are joined into one entry (`multiline`). Give the service
+user access with `usermod -aG docker tailcove-agent` (which is the root-equivalent
+step), or run the agent as a container with the socket mounted read-only.
+
+**Kubernetes.** `"kubernetes": {"enabled": true}` or `TAILCOVE_KUBERNETES=true`
+on a node follows every pod's logs and reports container and pod CPU and memory;
+the DaemonSet manifest and Helm chart are in Tailcove's repository under
+`deploy/agent`, and the settings are in the
+[docs](https://tailcove.dev/docs/sending-logs/agent#kubernetes).
+
 ## What it sends
 
 **Logs.** Every line appended to a followed file becomes a log line with the
