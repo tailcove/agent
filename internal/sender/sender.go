@@ -53,6 +53,15 @@ func New(endpoint, token, userAgent string) *Sender {
 	}
 }
 
+// WithToken is a sender like this one that posts with another source's token:
+// the same endpoint, client and backoff, and its own retries.
+func (s *Sender) WithToken(token string) *Sender {
+	other := *s
+	other.Token = token
+
+	return &other
+}
+
 // Post sends body to path (for example /api/v1/logs) until the API accepts it,
 // refuses it for good, or ctx ends. Network errors, 429, 503 and other 5xx are
 // retried with exponential backoff and jitter (a Retry-After header is

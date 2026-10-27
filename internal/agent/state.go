@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/tailcove/agent/internal/tail"
@@ -115,4 +116,42 @@ func (s *State) Save() error {
 	s.dirty = false
 
 	return nil
+}
+
+// Forget drops the saved position of a file that is gone.
+func (s *State) Forget(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, known := s.positions[path]; known {
+		delete(s.positions, path)
+		s.dirty = true
+	}
+}
+
+// PruneMissing drops the positions of files under prefix that no longer exist
+// and returns how many. A pod that is deleted while the agent is down leaves its
+// position behind, and so does a line still in flight when its file went.
+func (s *State) PruneMissing(prefix string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	removed := 0
+
+	for path := range s.positions {
+		if !strings.HasPrefix(path, prefix) {
+			continue
+		}
+
+		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+			delete(s.positions, path)
+			removed++
+		}
+	}
+
+	if removed > 0 {
+		s.dirty = true
+	}
+
+	return removed
 }

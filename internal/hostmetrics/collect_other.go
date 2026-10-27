@@ -20,6 +20,11 @@ func NewCollector(excludeIfaces, excludeMounts []string) *Collector {
 	return &Collector{ExcludeIfaces: excludeIfaces, ExcludeMounts: excludeMounts}
 }
 
+// NewCollectorAt returns a collector that reports nothing on this system.
+func NewCollectorAt(_ string, excludeIfaces, excludeMounts []string) *Collector {
+	return NewCollector(excludeIfaces, excludeMounts)
+}
+
 // DefaultExcludedInterfaces are virtual interfaces that would only add series.
 var DefaultExcludedInterfaces = []string{"lo", "veth*", "docker*", "br-*", "cali*", "flannel*", "cni*", "virbr*"}
 

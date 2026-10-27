@@ -28,7 +28,17 @@ type Collector struct {
 
 // NewCollector reads from the real /proc.
 func NewCollector(excludeIfaces, excludeMounts []string) *Collector {
-	return &Collector{ExcludeIfaces: excludeIfaces, ExcludeMounts: excludeMounts, root: "/proc"}
+	return NewCollectorAt("/proc", excludeIfaces, excludeMounts)
+}
+
+// NewCollectorAt reads from the /proc mounted at root: the host's, mounted
+// into a container as /host/proc, rather than the container's own view.
+func NewCollectorAt(root string, excludeIfaces, excludeMounts []string) *Collector {
+	if root == "" {
+		root = "/proc"
+	}
+
+	return &Collector{ExcludeIfaces: excludeIfaces, ExcludeMounts: excludeMounts, root: root}
 }
 
 // DefaultExcludedInterfaces are virtual interfaces that would only add series.

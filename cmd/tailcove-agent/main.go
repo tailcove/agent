@@ -36,6 +36,10 @@ The configuration is a JSON file (-config, or /etc/tailcove-agent.json when it
 exists) with environment variables on top: TAILCOVE_TOKEN, TAILCOVE_ENDPOINT,
 TAILCOVE_HOST, TAILCOVE_LOG_PATHS (comma separated), TAILCOVE_METRICS (true or
 false), TAILCOVE_METRICS_INTERVAL, TAILCOVE_STATE_FILE.
+
+On a Kubernetes node (a DaemonSet), TAILCOVE_KUBERNETES=true follows every pod's
+logs under /var/log/pods and reports container and pod CPU and memory; the
+"kubernetes" block of the configuration file tunes it (see the docs).
 `
 
 func main() {
@@ -98,9 +102,16 @@ func run(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Printf("tailcove-agent %s sending to %s as host %q (%d log source(s), metrics %v)", version, cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled())
+	log.Printf("tailcove-agent %s sending to %s as host %q (%d log source(s), metrics %v, kubernetes %v)", version, cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled(), cfg.Kubernetes.Enabled)
 
-	(&agent.Agent{Config: cfg, Sender: post, State: agent.LoadState(cfg.StateFile), Logf: log.Printf}).Run(ctx)
+	running := &agent.Agent{Config: cfg, Sender: post, State: agent.LoadState(cfg.StateFile), Logf: log.Printf}
+
+	if cfg.Kubernetes.Enabled {
+		running.Kube = agent.NewKubernetes(cfg.Kubernetes, log.Printf)
+		log.Print(running.Kube.Describe())
+	}
+
+	running.Run(ctx)
 
 	log.Print("stopped")
 
@@ -140,7 +151,7 @@ func runProbe(configPath string) int {
 // check posts an empty batch, which the API authenticates and accepts without
 // storing anything, and says what it learned.
 func check(cfg config.Config) int {
-	fmt.Printf("endpoint %s, host %q, %d log source(s), metrics %v\n", cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled())
+	fmt.Printf("endpoint %s, host %q, %d log source(s), metrics %v, kubernetes %v\n", cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled(), cfg.Kubernetes.Enabled)
 
 	request, err := http.NewRequest(http.MethodPost, cfg.Endpoint+"/api/v1/logs", strings.NewReader("[]"))
 	if err != nil {
