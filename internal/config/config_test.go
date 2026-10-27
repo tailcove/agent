@@ -134,3 +134,79 @@ func TestLoadProbeRefusesAPlainHTTPEndpoint(t *testing.T) {
 		t.Fatal("plain http to a remote host must be refused")
 	}
 }
+
+func TestKubernetesDefaults(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "abc")
+	t.Setenv("NODE_NAME", "node-7")
+
+	cfg, err := Load(write(t, `{"kubernetes":{"enabled":true}}`), host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	k := cfg.Kubernetes
+	if k.NodeName != "node-7" || k.PodsDir != DefaultPodsDir || k.Host != "pod" || !k.APIEnabled() || !k.MetricsEnabled() || len(k.Labels) != len(DefaultKubernetesLabels) {
+		t.Fatalf("unexpected defaults: %+v", k)
+	}
+}
+
+func TestKubernetesCanBeTheOnlyThingConfigured(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "abc")
+	t.Setenv("TAILCOVE_METRICS", "false")
+	t.Setenv("TAILCOVE_KUBERNETES", "true")
+	t.Setenv("NODE_NAME", "n")
+
+	if _, err := Load("", host); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestKubernetesSettingsAreValidated(t *testing.T) {
+	cases := map[string]string{
+		`{"kubernetes":{"enabled":true,"host":"cluster"}}`:                             "host",
+		`{"kubernetes":{"enabled":true,"labels":["bad key"]}}`:                         "label key",
+		`{"kubernetes":{"enabled":true,"routes":[{"token":"t"}]}}`:                     "matches everything",
+		`{"kubernetes":{"enabled":true,"routes":[{"namespace":"a","token":"t t"}]}}`:   "token",
+		`{"kubernetes":{"enabled":true,"metrics":{"interval_seconds":1}}}`:             "interval_seconds",
+		`{"kubernetes":{"enabled":true,"multiline":{"mode":"pattern"}}}`:               "pattern",
+		`{"kubernetes":{"enabled":true,"multiline":{"mode":"pattern","pattern":"("}}}`: "multiline pattern",
+		`{"kubernetes":{"enabled":true,"multiline":{"mode":"sometimes"}}}`:             "multiline mode",
+		`{"kubernetes":{"enabled":true,"metrics":{"max_series":-1}}}`:                  "max_series",
+	}
+
+	for body, want := range cases {
+		t.Setenv("TAILCOVE_TOKEN", "abc")
+		t.Setenv("NODE_NAME", "n")
+
+		if _, err := Load(write(t, body), host); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: want error containing %q, got %v", body, want, err)
+		}
+	}
+}
+
+func TestKubernetesFlagsAreParsedStrictly(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "abc")
+	t.Setenv("NODE_NAME", "n")
+	t.Setenv("TAILCOVE_KUBERNETES", "yes")
+
+	if _, err := Load("", host); err == nil || !strings.Contains(err.Error(), "TAILCOVE_KUBERNETES") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestKubernetesEnvironmentLists(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "abc")
+	t.Setenv("NODE_NAME", "n")
+	t.Setenv("TAILCOVE_KUBERNETES", "true")
+	t.Setenv("TAILCOVE_K8S_EXCLUDE_NAMESPACES", "kube-system, monitoring")
+	t.Setenv("TAILCOVE_K8S_HOST", "label:app")
+
+	cfg, err := Load("", host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(cfg.Kubernetes.ExcludeNamespaces) != 2 || cfg.Kubernetes.ExcludeNamespaces[1] != "monitoring" || cfg.Kubernetes.Host != "label:app" {
+		t.Fatalf("unexpected: %+v", cfg.Kubernetes)
+	}
+}
