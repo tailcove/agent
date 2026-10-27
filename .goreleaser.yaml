@@ -25,6 +25,8 @@ checksum:
   name_template: checksums.txt
 
 release:
+  # A tag with a prerelease part (v0.2.0-rc.0) is published as a pre-release, so it is never the latest release.
+  prerelease: auto
   extra_files:
     - glob: install.sh
     - glob: packaging/tailcove-agent.service

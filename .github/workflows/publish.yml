@@ -51,7 +51,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Version
         id: version
-        run: echo "number=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          number="${GITHUB_REF_NAME#v}"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          # The image tag `latest` moves only for a final release, never for a release candidate.
+          case "$number" in
+            *-*) echo "latest=" >> "$GITHUB_OUTPUT" ;;
+            *) echo "latest=ghcr.io/tailcove/agent:latest" >> "$GITHUB_OUTPUT" ;;
+          esac
       - name: Image
         uses: docker/build-push-action@v6
         with:
@@ -61,4 +68,4 @@ jobs:
           build-args: VERSION=${{ steps.version.outputs.number }}
           tags: |
             ghcr.io/tailcove/agent:${{ steps.version.outputs.number }}
-            ghcr.io/tailcove/agent:latest
+            ${{ steps.version.outputs.latest }}
