@@ -16,6 +16,7 @@ import (
 
 	"github.com/tailcove/agent/internal/agent"
 	"github.com/tailcove/agent/internal/config"
+	"github.com/tailcove/agent/internal/probe"
 	"github.com/tailcove/agent/internal/sender"
 )
 
@@ -27,6 +28,8 @@ const usage = `Usage: tailcove-agent [-config file] <command>
 Commands:
   run       follow the configured log files and report host metrics (default)
   check     validate the configuration and test the token against the API
+  probe     run as a probe: pull the monitor checks due for this host's region,
+            run them from here and post the results (needs a probe token)
   version   print the version
 
 The configuration is a JSON file (-config, or /etc/tailcove-agent.json when it
@@ -58,6 +61,10 @@ func run(args []string) int {
 		fmt.Printf("tailcove-agent %s (%s/%s)\n", version, runtime.GOOS, runtime.GOARCH)
 
 		return 0
+	}
+
+	if command == "probe" {
+		return runProbe(*configPath)
 	}
 
 	if command != "run" && command != "check" {
@@ -94,6 +101,36 @@ func run(args []string) int {
 	log.Printf("tailcove-agent %s sending to %s as host %q (%d log source(s), metrics %v)", version, cfg.Endpoint, cfg.Host, len(cfg.Logs), cfg.MetricsEnabled())
 
 	(&agent.Agent{Config: cfg, Sender: post, State: agent.LoadState(cfg.StateFile), Logf: log.Printf}).Run(ctx)
+
+	log.Print("stopped")
+
+	return 0
+}
+
+// runProbe is probe mode: it needs only a probe token and an endpoint.
+func runProbe(configPath string) int {
+	path := configPath
+	if path == "" {
+		if _, err := os.Stat("/etc/tailcove-agent.json"); err == nil {
+			path = "/etc/tailcove-agent.json"
+		}
+	}
+
+	cfg, err := config.LoadProbe(path, os.Hostname)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tailcove-agent: %v\n", err)
+
+		return 1
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	log.Printf("tailcove-agent %s probing for %s", version, cfg.Endpoint)
+
+	p := probe.New(cfg.Endpoint, cfg.Token, version)
+	p.Logf = log.Printf
+	p.Run(ctx)
 
 	log.Print("stopped")
 

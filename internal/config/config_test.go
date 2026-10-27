@@ -100,3 +100,37 @@ func TestPlainHTTPIsAllowedOnLoopbackAndWhenAccepted(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadProbeNeedsAProbeToken(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "")
+
+	if _, err := LoadProbe(write(t, `{"token":"abc"}`), host); err == nil || !strings.Contains(err.Error(), "tcp_") {
+		t.Fatalf("a source token must not start a probe, got %v", err)
+	}
+
+	cfg, err := LoadProbe(write(t, `{"token":"tcp_abc"}`), host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Endpoint != DefaultEndpoint {
+		t.Fatalf("endpoint = %q", cfg.Endpoint)
+	}
+}
+
+func TestLoadProbeNeedsNoLogsOrMetrics(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "")
+	t.Setenv("TAILCOVE_METRICS", "false")
+
+	if _, err := LoadProbe(write(t, `{"token":"tcp_abc"}`), host); err != nil {
+		t.Fatalf("probe mode has nothing to follow: %v", err)
+	}
+}
+
+func TestLoadProbeRefusesAPlainHTTPEndpoint(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "")
+
+	if _, err := LoadProbe(write(t, `{"token":"tcp_abc","endpoint":"http://tailcove.example"}`), host); err == nil {
+		t.Fatal("plain http to a remote host must be refused")
+	}
+}

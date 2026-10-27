@@ -54,6 +54,26 @@ func (c Config) MetricsEnabled() bool {
 // Load reads the JSON file at path (when it is not empty), applies the
 // environment on top, fills defaults and validates the result.
 func Load(path string, hostname func() (string, error)) (Config, error) {
+	cfg, err := load(path, hostname)
+	if err != nil {
+		return cfg, err
+	}
+
+	return cfg, cfg.Validate()
+}
+
+// LoadProbe is Load for probe mode: the token is a probe token, and there are
+// no log files or metrics to require.
+func LoadProbe(path string, hostname func() (string, error)) (Config, error) {
+	cfg, err := load(path, hostname)
+	if err != nil {
+		return cfg, err
+	}
+
+	return cfg, cfg.ValidateProbe()
+}
+
+func load(path string, hostname func() (string, error)) (Config, error) {
 	var cfg Config
 
 	if path != "" {
@@ -94,7 +114,7 @@ func Load(path string, hostname func() (string, error)) (Config, error) {
 		}
 	}
 
-	return cfg, cfg.Validate()
+	return cfg, nil
 }
 
 func applyEnv(cfg *Config, get func(string) string) error {
@@ -195,6 +215,25 @@ func (c Config) Validate() error {
 
 	if len(c.Logs) == 0 && !c.MetricsEnabled() {
 		return errors.New("nothing to do: no log files are configured and metrics are off")
+	}
+
+	return nil
+}
+
+// ValidateProbe checks what probe mode cannot run without: a probe token (it
+// starts with tcp_, unlike a source token) and an endpoint the token may travel to.
+func (c Config) ValidateProbe() error {
+	if !strings.HasPrefix(strings.TrimSpace(c.Token), "tcp_") {
+		return errors.New("a probe token is required (token in the config file, or TAILCOVE_TOKEN): it starts with tcp_; a source token does not open the probe endpoints")
+	}
+
+	endpoint, err := url.Parse(c.Endpoint)
+	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") {
+		return fmt.Errorf("endpoint %q is not an http(s) URL", c.Endpoint)
+	}
+
+	if endpoint.Scheme == "http" && !c.Insecure && !isLoopback(endpoint.Hostname()) {
+		return fmt.Errorf("endpoint %q is plain http: the token would travel in the clear (use https, or set insecure to accept that)", c.Endpoint)
 	}
 
 	return nil
