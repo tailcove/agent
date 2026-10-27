@@ -7,7 +7,7 @@ builds:
     binary: tailcove-agent
     env:
       - CGO_ENABLED=0
-    goos: [linux]
+    goos: [linux, darwin]
     goarch: [amd64, arm64]
     flags: [-trimpath]
     ldflags:
@@ -28,6 +28,7 @@ release:
   extra_files:
     - glob: install.sh
     - glob: packaging/tailcove-agent.service
+    - glob: packaging/com.tailcove.agent.plist
 
 changelog:
   disable: true
