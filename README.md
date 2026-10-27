@@ -64,6 +64,21 @@ variables on top:
 `tailcove-agent check` validates the configuration and asks the API whether the
 token is accepted. `tailcove-agent version` prints the version.
 
+## Run as a probe
+
+With a **probe token** the same program checks your monitors from the host's region. Tailcove hands it the
+HTTP and TCP checks due for that region, it runs them from here and posts the results; a monitor checked from
+several regions is down only when enough of them agree.
+
+```sh
+TAILCOVE_TOKEN=tcp_your-probe-token tailcove-agent probe
+```
+
+A systemd unit for it is in `packaging/tailcove-probe.service`. A probe token starts with `tcp_` and is created by whoever runs your Tailcove; a source token does not open the
+probe endpoints. A probe follows no log files and sends no host metrics. It refuses to connect to private,
+loopback, link-local and other non-public addresses, at the moment of connecting, and sends a monitor's headers and
+body only to the host the monitor names. It holds no other credential.
+
 ## What it sends
 
 **Logs.** Every line appended to a followed file becomes a log line with the

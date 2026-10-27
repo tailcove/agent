@@ -1,0 +1,22 @@
+[Unit]
+Description=Tailcove probe
+Documentation=https://tailcove.dev/docs/sending-logs/agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/tailcove-agent -config /etc/tailcove-agent.json probe
+Restart=always
+RestartSec=5
+User=tailcove-probe
+Group=tailcove-probe
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
