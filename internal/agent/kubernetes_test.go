@@ -161,6 +161,9 @@ func startKube(t *testing.T, server *httptest.Server, podsDir string, kcfg confi
 		close(run.done)
 	}()
 
+	// An assertion that fails must not leave the agent running: stopping twice is fine.
+	t.Cleanup(run.stop)
+
 	return run
 }
 

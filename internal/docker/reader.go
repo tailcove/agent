@@ -304,6 +304,8 @@ type containerStream struct {
 	mu      sync.Mutex
 	lines   *Lines
 	joiners map[string]*tail.Joiner
+	// highest is the time of the latest line of any event sent so far.
+	highest time.Time
 }
 
 func (s *containerStream) chunk(chunk Chunk) {
@@ -353,11 +355,15 @@ func (s *containerStream) finish() {
 	}
 }
 
-// emit sends an event. Its cursor is the time of its last line, but never past
-// the first line of an event that is still being joined on the other stream:
-// the cursor must not move beyond anything that has not been sent.
+// emit sends an event. Its cursor is the time of the latest line sent so far on
+// either stream, but never past the first line of an event that is still being
+// joined: the cursor must not move beyond anything that has not been sent.
 func (s *containerStream) emit(done tail.Joined) {
-	cursor := done.Last
+	if done.Last.After(s.highest) {
+		s.highest = done.Last
+	}
+
+	cursor := s.highest
 
 	for _, joiner := range s.joiners {
 		if since, open := joiner.OpenSince(); open && !since.After(cursor) {

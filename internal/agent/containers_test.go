@@ -42,6 +42,9 @@ func startAgent(t *testing.T, server *httptest.Server, cfg config.Config, stateP
 		close(run.done)
 	}()
 
+	// An assertion that fails must not leave the agent running: stopping twice is fine.
+	t.Cleanup(run.stop)
+
 	return run
 }
 
@@ -240,15 +243,29 @@ func TestDockerLogsAreDeliveredWithTheirContainerAndDoNotRepeatAfterARestart(t *
 
 	waitUntil(t, "two entries", func() bool { return recorded.count("main-token") >= 2 })
 
-	entries := recorded.entries("main-token")
-	docker := entries[0]["context"].(map[string]any)["docker"].(map[string]any)
+	// The two streams are joined separately, so which of the two comes first is not defined.
+	var plain, structured map[string]any
 
-	if entries[0]["message"] != "listening on :8080" || entries[0]["host"] != "api" || docker["container"] != "shop-api-1" || docker["compose_project"] != "shop" || docker["image"] != "shop/api:2" {
-		t.Errorf("entry %v", entries[0])
+	for _, entry := range recorded.entries("main-token") {
+		if entry["message"] == "listening on :8080" {
+			plain = entry
+		} else {
+			structured = entry
+		}
 	}
 
-	if entries[1]["message"] != "payment failed" || entries[1]["level"] != "error" || entries[1]["host"] != "api" {
-		t.Errorf("JSON entry %v", entries[1])
+	if plain == nil || structured == nil {
+		t.Fatalf("entries %v", recorded.entries("main-token"))
+	}
+
+	docker := plain["context"].(map[string]any)["docker"].(map[string]any)
+
+	if plain["host"] != "api" || docker["container"] != "shop-api-1" || docker["compose_project"] != "shop" || docker["image"] != "shop/api:2" || docker["stream"] != "stdout" {
+		t.Errorf("entry %v", plain)
+	}
+
+	if structured["message"] != "payment failed" || structured["level"] != "error" || structured["host"] != "api" {
+		t.Errorf("JSON entry %v", structured)
 	}
 
 	key := "docker:dddddddddddd0000000000000000000000000000000000000000000000000000"
