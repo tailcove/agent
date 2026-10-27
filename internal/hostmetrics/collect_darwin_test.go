@@ -68,3 +68,27 @@ func TestACollectorWithoutToolsReportsNothingInsteadOfFailing(t *testing.T) {
 		t.Errorf("got %d points", len(points))
 	}
 }
+
+// This one runs the real tools: it is what proves, on a real Mac in CI, that the
+// parsers above read what top, vm_stat, netstat and mount really print.
+func TestTheRealToolsOfThisMacAreRead(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs top for two seconds")
+	}
+
+	collector := NewCollector(DefaultExcludedInterfaces, nil)
+	seen := map[string]bool{}
+
+	for _, point := range collector.Collect() {
+		seen[point.Name] = true
+	}
+
+	for _, name := range []string{
+		"system.cpu.usage_percent", "system.load.1m", "system.mem.total_bytes", "system.mem.used_percent",
+		"system.net.bytes_recv", "system.disk.total_bytes", "system.uptime_seconds",
+	} {
+		if !seen[name] {
+			t.Errorf("%s was not reported", name)
+		}
+	}
+}

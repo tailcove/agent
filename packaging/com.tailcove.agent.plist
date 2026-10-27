@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs the Tailcove agent on macOS.
+
+    sudo install -m 0755 tailcove-agent /usr/local/bin/tailcove-agent
+    sudo install -m 0600 tailcove-agent.json /usr/local/etc/tailcove-agent.json   (your token goes in it)
+    sudo install -m 0644 com.tailcove.agent.plist /Library/LaunchDaemons/
+    sudo launchctl bootstrap system /Library/LaunchDaemons/com.tailcove.agent.plist
+
+  Stop it with: sudo launchctl bootout system/com.tailcove.agent
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tailcove.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/tailcove-agent</string>
+        <string>-config</string>
+        <string>/usr/local/etc/tailcove-agent.json</string>
+        <string>run</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>TAILCOVE_STATE_FILE</key>
+        <string>/usr/local/var/lib/tailcove-agent/state.json</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>StandardErrorPath</key>
+    <string>/usr/local/var/log/tailcove-agent.log</string>
+    <key>StandardOutPath</key>
+    <string>/usr/local/var/log/tailcove-agent.log</string>
+</dict>
+</plist>

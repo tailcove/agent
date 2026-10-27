@@ -26,7 +26,27 @@ curl -fsSL https://github.com/tailcove/agent/releases/latest/download/install.sh
 
 The script downloads the release for your architecture, checks it against the
 release's SHA-256 sums, installs `/usr/local/bin/tailcove-agent`, writes
-`/etc/tailcove-agent.json` and starts a systemd service. Or use the container:
+`/etc/tailcove-agent.json` and starts a systemd service.
+
+Or install the package for your distribution from the
+[release](https://github.com/tailcove/agent/releases) (amd64 and arm64), then put
+your token in `/etc/tailcove-agent.json` and start the service:
+
+```sh
+# Debian, Ubuntu
+sudo apt install ./tailcove-agent_<version>_amd64.deb
+# Fedora, RHEL and compatibles, openSUSE
+sudo dnf install ./tailcove-agent-<version>-1.x86_64.rpm     # or: sudo rpm -i ...
+sudo systemctl enable --now tailcove-agent
+```
+
+The package installs `/usr/bin/tailcove-agent` and the unit, creates a
+`tailcove-agent` user (in the `adm` and `systemd-journal` groups, never `docker`),
+and writes `/etc/tailcove-agent.json` once, from the example, readable by root and
+the service only. It does not start a service that has no token. Upgrading keeps
+your configuration and restarts the service; removing keeps the configuration, and
+`apt purge` deletes it with the state. Every release lists the packages' checksums
+in `SHA256SUMS`. Or use the container:
 
 ```sh
 docker run -d --name tailcove-agent --restart always \
@@ -120,7 +140,7 @@ saved, so a restart neither repeats nor skips lines. A new file that was already
 there is followed from its end unless you set `from_beginning`. Lines over 64 KB
 are cut and marked.
 
-**Metrics.** Every interval (30 seconds by default, at least 10), on Linux:
+**Metrics.** Every interval (30 seconds by default, at least 10), on Linux and macOS:
 CPU usage, load, memory, swap, uptime, and per mount and per interface disk and
 network figures, named `system.*`. Network and disk figures are counters or
 gauges as the kernel reports them; use the `max` or `last` aggregate to chart a
@@ -135,20 +155,37 @@ what it holds is dropped, with a log line. While the API is unreachable the
 agent stops reading further instead of losing lines: the files stay where they
 are.
 
+## macOS
+
+The release has `darwin` binaries (Intel and Apple silicon) and a launchd
+definition, `packaging/com.tailcove.agent.plist`, with the install commands in its
+header. Logs are followed from files; host metrics (CPU, load, memory, swap,
+uptime, disk and network) are read by running macOS's own `top`, `sysctl`,
+`vm_stat`, `netstat` and `mount`, with the same names as on Linux. journald and
+Docker are Linux features of the agent, and Docker Desktop's socket is not
+supported.
+
 ## Build
 
 ```sh
 go build ./cmd/tailcove-agent
 go test -race ./...
+sh tests/install_test.sh      # install.sh against a release built on the spot
+sh tests/package_test.sh      # the .deb and .rpm: contents and maintainer scripts
+sh packaging/build-packages.sh 0.2.0 dist/packages    # needs dpkg-deb; the .rpm is written by packaging/mkrpm
 ```
 
 Go 1.24 or newer; the standard library is the only dependency.
 
 ## Releases
 
-Pushing a `v*` tag runs the publish workflow: it builds the Linux binaries,
-attaches them to a GitHub release with `checksums.txt` and `install.sh`, and
-pushes `ghcr.io/tailcove/agent`. No registry token is stored anywhere.
+Pushing a `v*` tag runs the publish workflow. It first builds the packages and
+installs them for real (the `.deb` on a runner, the `.rpm` in Fedora, AlmaLinux
+and openSUSE containers); only then does it build the Linux and macOS binaries,
+attach them and the packages to a GitHub release with `checksums.txt`,
+`SHA256SUMS` and `install.sh`, and push `ghcr.io/tailcove/agent`. No registry
+token is stored anywhere. The `ci` workflow runs the tests on Linux and macOS,
+builds for every target, and runs the same package installs on every change.
 
 ## Help and feedback
 
