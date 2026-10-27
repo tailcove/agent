@@ -128,34 +128,3 @@ func (c *Collector) Collect() []Point {
 
 	return points
 }
-
-func memoryPoints(memory Memory) []Point {
-	used := memory.Total - min(memory.Available, memory.Total)
-
-	points := []Point{
-		{Name: "system.mem.total_bytes", Value: float64(memory.Total)},
-		{Name: "system.mem.available_bytes", Value: float64(memory.Available)},
-		{Name: "system.mem.used_bytes", Value: float64(used)},
-	}
-
-	if memory.Total > 0 {
-		points = append(points, Point{Name: "system.mem.used_percent", Value: float64(used) / float64(memory.Total) * 100})
-	}
-
-	if memory.SwapTotal > 0 {
-		swapUsed := memory.SwapTotal - min(memory.SwapFree, memory.SwapTotal)
-		points = append(points, Point{Name: "system.swap.used_percent", Value: float64(swapUsed) / float64(memory.SwapTotal) * 100})
-	}
-
-	return points
-}
-
-func matchesAny(patterns []string, name string) bool {
-	for _, pattern := range patterns {
-		if ok, err := filepath.Match(pattern, name); err == nil && ok {
-			return true
-		}
-	}
-
-	return false
-}
