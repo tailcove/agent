@@ -3,6 +3,8 @@ name: publish
 on:
   push:
     tags: ['v*']
+  # started by the auto-release workflow on the tag it made: a tag pushed with the workflow token starts nothing
+  workflow_dispatch:
 
 permissions:
   contents: write

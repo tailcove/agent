@@ -29,6 +29,9 @@ jobs:
       - name: Install script
         if: runner.os == 'Linux'
         run: sh tests/install_test.sh
+      - name: Release decision
+        if: runner.os == 'Linux'
+        run: sh tests/next_release_test.sh
 
   cross-build:
     runs-on: ubuntu-latest
