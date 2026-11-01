@@ -16,8 +16,10 @@ import (
 const (
 	DefaultEndpoint        = "https://ingest.tailcove.dev"
 	DefaultMetricsInterval = 30
-	MinMetricsInterval     = 10
-	DefaultStateFile       = "/var/lib/tailcove-agent/state.json"
+	// DefaultHeartbeatInterval is how often the agent says it is alive.
+	DefaultHeartbeatInterval = 30
+	MinMetricsInterval       = 10
+	DefaultStateFile         = "/var/lib/tailcove-agent/state.json"
 )
 
 // LogSource is one file or glob to follow.
@@ -51,6 +53,15 @@ type Metrics struct {
 	// ProcRoot is where the host's /proc is mounted when the agent runs in a
 	// container (/host/proc); /proc by default.
 	ProcRoot string `json:"proc_root"`
+}
+
+// Heartbeat is the agent's own "I am alive" signal: one point, system.agent.up,
+// every interval, sent whether or not host metrics are on and whether or not any
+// log line arrives, so an agent that died (or a host that went down) is told
+// apart from a quiet one. A no-data alert on that metric is the watchdog.
+type Heartbeat struct {
+	Enabled         *bool `json:"enabled"`
+	IntervalSeconds int   `json:"interval_seconds"`
 }
 
 // KubernetesRoute sends the pods it matches to another source.
@@ -107,6 +118,7 @@ type Config struct {
 	StateFile  string      `json:"state_file"`
 	Logs       []LogSource `json:"logs"`
 	Metrics    Metrics     `json:"metrics"`
+	Heartbeat  Heartbeat   `json:"heartbeat"`
 	Kubernetes Kubernetes  `json:"kubernetes"`
 	Journald   Journald    `json:"journald"`
 	Docker     Docker      `json:"docker"`
@@ -115,6 +127,11 @@ type Config struct {
 // MetricsEnabled reports whether host metrics are collected (on by default).
 func (c Config) MetricsEnabled() bool {
 	return c.Metrics.Enabled == nil || *c.Metrics.Enabled
+}
+
+// HeartbeatEnabled reports whether the agent sends its heartbeat (on by default).
+func (c Config) HeartbeatEnabled() bool {
+	return c.Heartbeat.Enabled == nil || *c.Heartbeat.Enabled
 }
 
 // Load reads the JSON file at path (when it is not empty), applies the
@@ -168,6 +185,10 @@ func load(path string, hostname func() (string, error)) (Config, error) {
 
 	if cfg.Metrics.IntervalSeconds == 0 {
 		cfg.Metrics.IntervalSeconds = DefaultMetricsInterval
+	}
+
+	if cfg.Heartbeat.IntervalSeconds == 0 {
+		cfg.Heartbeat.IntervalSeconds = DefaultHeartbeatInterval
 	}
 
 	if cfg.StateFile == "" {
@@ -236,6 +257,24 @@ func applyEnv(cfg *Config, get func(string) string) error {
 		cfg.Metrics.IntervalSeconds = seconds
 	}
 
+	if v := get("TAILCOVE_HEARTBEAT"); v != "" {
+		enabled, err := ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("TAILCOVE_HEARTBEAT: %w", err)
+		}
+
+		cfg.Heartbeat.Enabled = &enabled
+	}
+
+	if v := get("TAILCOVE_HEARTBEAT_INTERVAL"); v != "" {
+		seconds, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("TAILCOVE_HEARTBEAT_INTERVAL: %q is not a whole number of seconds", v)
+		}
+
+		cfg.Heartbeat.IntervalSeconds = seconds
+	}
+
 	if err := applyKubernetesEnv(cfg, get); err != nil {
 		return err
 	}
@@ -291,6 +330,10 @@ func (c Config) Validate() error {
 
 	if c.Metrics.IntervalSeconds < MinMetricsInterval {
 		return fmt.Errorf("metrics interval_seconds must be at least %d", MinMetricsInterval)
+	}
+
+	if c.Heartbeat.IntervalSeconds < MinMetricsInterval {
+		return fmt.Errorf("heartbeat interval_seconds must be at least %d", MinMetricsInterval)
 	}
 
 	for _, source := range c.Logs {

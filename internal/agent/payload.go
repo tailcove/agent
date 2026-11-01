@@ -100,3 +100,13 @@ func joinArray(entries []json.RawMessage) []byte {
 
 	return buffer.Bytes()
 }
+
+// heartbeatMetric is the series a host's agent beats on.
+const heartbeatMetric = "system.agent.up"
+
+// heartbeatPayload is the one-point body of a heartbeat.
+func heartbeatPayload(host string, at time.Time) []byte {
+	encoded, _ := json.Marshal(metricPoint{Name: heartbeatMetric, Value: 1, Host: host, TS: at.UTC().Format(time.RFC3339Nano)})
+
+	return joinArray([]json.RawMessage{encoded})
+}

@@ -308,3 +308,62 @@ func TestJournaldAndDockerFlagsAreParsedStrictly(t *testing.T) {
 		t.Setenv(name, "")
 	}
 }
+
+func TestTheHeartbeatIsOnByDefaultEveryThirtySeconds(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "")
+	t.Setenv("TAILCOVE_HEARTBEAT", "")
+	t.Setenv("TAILCOVE_HEARTBEAT_INTERVAL", "")
+
+	cfg, err := Load(write(t, `{"token":"abc","logs":[{"path":"/var/log/app.log"}]}`), host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !cfg.HeartbeatEnabled() || cfg.Heartbeat.IntervalSeconds != 30 {
+		t.Fatalf("unexpected heartbeat defaults: %+v", cfg.Heartbeat)
+	}
+}
+
+func TestTheHeartbeatCanBeSwitchedOffOrSlowedByFileOrEnvironment(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "")
+	t.Setenv("TAILCOVE_HEARTBEAT", "")
+	t.Setenv("TAILCOVE_HEARTBEAT_INTERVAL", "")
+
+	file, err := Load(write(t, `{"token":"abc","logs":[{"path":"/a.log"}],"heartbeat":{"enabled":false,"interval_seconds":60}}`), host)
+	if err != nil || file.HeartbeatEnabled() || file.Heartbeat.IntervalSeconds != 60 {
+		t.Fatalf("file: %+v %v", file.Heartbeat, err)
+	}
+
+	t.Setenv("TAILCOVE_HEARTBEAT", "true")
+	t.Setenv("TAILCOVE_HEARTBEAT_INTERVAL", "20")
+
+	env, err := Load(write(t, `{"token":"abc","logs":[{"path":"/a.log"}],"heartbeat":{"enabled":false}}`), host)
+	if err != nil || !env.HeartbeatEnabled() || env.Heartbeat.IntervalSeconds != 20 {
+		t.Fatalf("environment: %+v %v", env.Heartbeat, err)
+	}
+}
+
+func TestTheHeartbeatSettingsAreValidatedStrictly(t *testing.T) {
+	t.Setenv("TAILCOVE_TOKEN", "abc")
+
+	for _, bad := range []string{"no", "off", "ture", "2"} {
+		t.Setenv("TAILCOVE_HEARTBEAT", bad)
+
+		if _, err := Load("", host); err == nil || !strings.Contains(err.Error(), "TAILCOVE_HEARTBEAT") {
+			t.Errorf("TAILCOVE_HEARTBEAT=%q should be refused, got %v", bad, err)
+		}
+	}
+
+	t.Setenv("TAILCOVE_HEARTBEAT", "")
+	t.Setenv("TAILCOVE_HEARTBEAT_INTERVAL", "soon")
+
+	if _, err := Load("", host); err == nil || !strings.Contains(err.Error(), "TAILCOVE_HEARTBEAT_INTERVAL") {
+		t.Errorf("a non-number interval should be refused, got %v", err)
+	}
+
+	t.Setenv("TAILCOVE_HEARTBEAT_INTERVAL", "5")
+
+	if _, err := Load(write(t, `{"logs":[{"path":"/a.log"}]}`), host); err == nil || !strings.Contains(err.Error(), "at least") {
+		t.Errorf("an interval under the minimum should be refused, got %v", err)
+	}
+}
