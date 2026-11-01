@@ -1,0 +1,74 @@
+name: auto-release
+
+# Releases the agent after a green build of main, with no stored token: the next patch tag, then the
+# `publish` workflow is dispatched on that tag. (A tag pushed with the workflow token does not start
+# `publish` by itself, a workflow dispatch does.) Which version, and whether at all, is decided by
+# .github/scripts/next-release.sh: only code changes count, and a new minor or major version is a tag
+# pushed by hand, which `publish` handles as before. Run it by hand with dry_run to see the decision.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only say what would be released.
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # a green push to main of this repository, never a pull request (a fork's branch can be named main)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || 'main' }}
+      - name: Decide
+        id: decide
+        env:
+          COMMIT: ${{ github.event.workflow_run.head_sha || '' }}
+        run: |
+          git fetch --tags --force origin main
+          commit="${COMMIT:-$(git rev-parse origin/main)}"
+          # a newer commit on main has its own run; this one must not tag an older one
+          if [ "$commit" != "$(git rev-parse origin/main)" ]; then
+            echo "decision=skip: main has moved past $commit" >> "$GITHUB_OUTPUT"
+          else
+            echo "decision=$(sh .github/scripts/next-release.sh "$commit")" >> "$GITHUB_OUTPUT"
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - name: Say what was decided
+        env:
+          DECISION: ${{ steps.decide.outputs.decision }}
+        run: echo "$DECISION" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Tag and publish
+        if: >-
+          startsWith(steps.decide.outputs.decision, 'v') &&
+          (github.event_name != 'workflow_dispatch' || inputs.dry_run == false)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.decide.outputs.decision }}
+          COMMIT: ${{ steps.decide.outputs.commit }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION" "$COMMIT"
+          git push origin "refs/tags/$VERSION"
+          gh workflow run publish.yml --ref "$VERSION"
+          echo "Released $VERSION: the publish workflow was started on it." | tee -a "$GITHUB_STEP_SUMMARY"
