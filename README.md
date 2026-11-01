@@ -68,14 +68,16 @@ variables on top:
     { "path": "/var/log/nginx/*.log" },
     { "path": "/var/log/myapp/app.log", "from_beginning": false }
   ],
-  "metrics": { "enabled": true, "interval_seconds": 30 }
+  "metrics": { "enabled": true, "interval_seconds": 30 },
+  "heartbeat": { "enabled": true, "interval_seconds": 30 }
 }
 ```
 
 - `TAILCOVE_TOKEN`, `TAILCOVE_ENDPOINT` (default `https://ingest.tailcove.dev`),
   `TAILCOVE_HOST` (default: the machine's hostname), `TAILCOVE_LOG_PATHS`
   (comma separated), `TAILCOVE_METRICS` (`true` or `false`),
-  `TAILCOVE_METRICS_INTERVAL`, `TAILCOVE_STATE_FILE`.
+  `TAILCOVE_METRICS_INTERVAL`, `TAILCOVE_HEARTBEAT` (`true` or `false`),
+  `TAILCOVE_HEARTBEAT_INTERVAL`, `TAILCOVE_STATE_FILE`.
 - Only `true`, `false`, `1` and `0` are accepted for a switch; anything else is
   an error, not a silent default.
 - A plain `http` endpoint is refused unless it is on this machine or you set
@@ -147,6 +149,15 @@ gauges as the kernel reports them; use the `max` or `last` aggregate to chart a
 counter. Virtual interfaces (`lo`, `veth*`, `docker*` and so on) are left out by
 default, and a mount can be excluded in the configuration. Every distinct mount
 and interface is a series that counts toward your plan's series limit.
+
+**Heartbeat.** Every interval (30 seconds by default, at least 10) the agent sends one
+point, `system.agent.up` with the value 1 and the host name, and sends the first one
+as soon as it starts. It is sent whether or not host metrics are on and whether or not
+a log line arrives, so a host or agent that stopped is told apart from one that is
+only quiet. Switch it off with `"heartbeat": {"enabled": false}` or
+`TAILCOVE_HEARTBEAT=false`. It is one series per host and counts toward your plan's
+series limit. To be told when it stops, add a no-data metric alert on
+`system.agent.up` (the Sources page has a button for it).
 
 **Delivery.** Batches go out as soon as 500 lines are waiting or a second has
 passed. Failures are retried with growing, jittered waits; a `429` or `503`

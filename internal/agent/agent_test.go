@@ -224,6 +224,69 @@ func TestHostMetricsAreDeliveredEveryInterval(t *testing.T) {
 	}
 }
 
+func TestTheHeartbeatBeatsAtOnceAndEveryIntervalEvenWithMetricsOffAndNoLogs(t *testing.T) {
+	received := &recorder{}
+	server := httptest.NewServer(received.handler(0))
+	defer server.Close()
+
+	agent, _ := newAgent(t, server, config.Config{Metrics: config.Metrics{Enabled: &off}, Heartbeat: config.Heartbeat{IntervalSeconds: 1}})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	go func() {
+		agent.Run(ctx)
+		close(done)
+	}()
+
+	received.waitFor(t, "two heartbeats", func() bool { return len(received.metrics) >= 2 })
+	cancel()
+	<-done
+
+	for _, point := range received.metrics {
+		if point["name"] != "system.agent.up" || point["value"] != float64(1) || point["host"] != "web-1" || point["ts"] == "" {
+			t.Fatalf("not a heartbeat of web-1: %v", point)
+		}
+	}
+}
+
+func TestNoHeartbeatIsSentWhenItIsSwitchedOff(t *testing.T) {
+	received := &recorder{}
+	server := httptest.NewServer(received.handler(0))
+	defer server.Close()
+
+	logPath := filepath.Join(t.TempDir(), "app.log")
+	if err := os.WriteFile(logPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	agent, _ := newAgent(t, server, config.Config{
+		Logs:      []config.LogSource{{Path: logPath}},
+		Metrics:   config.Metrics{Enabled: &off},
+		Heartbeat: config.Heartbeat{Enabled: &off, IntervalSeconds: 1},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	agent.Run(ctx)
+
+	received.mu.Lock()
+	defer received.mu.Unlock()
+
+	if len(received.metrics) != 0 {
+		t.Fatalf("a switched-off heartbeat sent %v", received.metrics)
+	}
+}
+
+func TestTheHeartbeatBodyIsOneNativeMetricPoint(t *testing.T) {
+	body := heartbeatPayload("db-2", time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC))
+
+	if string(body) != `[{"name":"system.agent.up","value":1,"host":"db-2","ts":"2026-11-01T12:00:00Z"}]` {
+		t.Fatalf("unexpected body %s", body)
+	}
+}
+
 func TestEntriesFromTheSameFileKeepTheirOrderAndPlainTextIsNotInterpreted(t *testing.T) {
 	line := tail.Line{File: "/x.log", Text: `{"not json`, Time: time.Unix(0, 0)}
 	entry := logEntry(line, "h")

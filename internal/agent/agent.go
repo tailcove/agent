@@ -80,6 +80,15 @@ func (a *Agent) Run(ctx context.Context) {
 		}()
 	}
 
+	if a.Config.HeartbeatEnabled() {
+		group.Add(1)
+
+		go func() {
+			defer group.Done()
+			a.runHeartbeat(ctx)
+		}()
+	}
+
 	if a.Kube != nil && a.Config.Kubernetes.MetricsEnabled() {
 		group.Add(1)
 
@@ -369,6 +378,38 @@ func (a *Agent) batchLines(ctx context.Context, post *sender.Sender, items <-cha
 func (a *Agent) saveState() {
 	if err := a.State.Save(); err != nil {
 		a.logf("could not save the state file: %v", err)
+	}
+}
+
+// runHeartbeat says the agent is alive: one system.agent.up point straight away (so a new host shows at once)
+// and then every interval, whatever else the agent is or is not sending. Silence on that metric is what a
+// no-data alert watches for. One undeliverable beat is not retried late: the next replaces it.
+func (a *Agent) runHeartbeat(ctx context.Context) {
+	seconds := a.Config.Heartbeat.IntervalSeconds
+	if seconds <= 0 {
+		seconds = config.DefaultHeartbeatInterval
+	}
+
+	interval := time.Duration(seconds) * time.Second
+	beat := func() {
+		deliver, cancel := context.WithTimeout(ctx, interval)
+		defer cancel()
+
+		a.Sender.Post(deliver, metricsPath, heartbeatPayload(a.Config.Host, a.Now()))
+	}
+
+	beat()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			beat()
+		}
 	}
 }
 
