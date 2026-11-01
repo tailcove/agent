@@ -9,7 +9,7 @@ set -eu
 
 head="$(git rev-parse "${1:-HEAD}")"
 
-latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -t. -k1.2n -k2n -k3n | tail -n 1 || true)"
+latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -t. -k1.2,1n -k2,2n -k3,3n | tail -n 1 || true)"
 if [ -z "$latest" ]; then
     echo "skip: there is no stable release tag to count from"
     exit 0
