@@ -130,7 +130,7 @@ func parse(t *testing.T, file []byte) parsed {
 func samplePackage() Package {
 	return Package{
 		Name: "tailcove-agent", Version: "0.2.0", Release: "1", Arch: "x86_64",
-		Summary: "Tailcove agent", Description: "Sends logs.", License: "MIT", URL: "https://tailcove.dev", Packager: "Rana Tayyab <developers@akcybex.com>",
+		Summary: "Tailcove agent", Description: "Sends logs.", License: "MIT", URL: "https://tailcove.dev", Packager: "Tailcove",
 		BuildTime: time.Unix(1761561600, 0),
 		PostIn:    "#!/bin/sh\necho installed\n", PreUn: "#!/bin/sh\necho removing\n",
 		Entries: []Entry{
