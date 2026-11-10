@@ -125,7 +125,7 @@ MANIFEST
     go run ./packaging/mkrpm -out "$OUT/tailcove-agent-${RPM_VERSION}-${RPM_RELEASE}.${RPM_ARCH}.rpm" \
         -name tailcove-agent -version "$RPM_VERSION" -release "$RPM_RELEASE" -arch "$RPM_ARCH" \
         -summary "$SUMMARY" -description "$DESCRIPTION" -license MIT -url https://tailcove.dev/docs/sending-logs/agent \
-        -vendor Tailcove -packager "Tailcove" -time "$SOURCE_DATE_EPOCH" \
+        -vendor Tailcove -packager Tailcove -time "$SOURCE_DATE_EPOCH" \
         -manifest "$RPM/files.json" -postin "$RPM/post" -preun "$RPM/preun" -postun "$RPM/postun"
 done
 

@@ -99,11 +99,13 @@ jobs:
           rpm -qpi packages/tailcove-agent-*.x86_64.rpm
           rpm -qpl packages/tailcove-agent-*.x86_64.rpm
           rpm -qp --scripts packages/tailcove-agent-*.x86_64.rpm | grep -q tc_post_install
-          rpm -K packages/tailcove-agent-*.x86_64.rpm
+          # The packages are not signed. RPM 6 (current Fedora) counts a missing signature as a
+          # failure, so check the digests only; older rpm accepts this flag too.
+          rpm -K --nosignature packages/tailcove-agent-*.x86_64.rpm
       - name: Install
         run: |
           set -eu
-          rpm -i --nodeps packages/tailcove-agent-*.x86_64.rpm
+          rpm -i --nodeps --nosignature packages/tailcove-agent-*.x86_64.rpm
           tailcove-agent version
           id tailcove-agent
           test -f /etc/tailcove-agent.json
@@ -114,7 +116,7 @@ jobs:
         run: |
           set -eu
           sed -i 's/YOUR_SOURCE_TOKEN/ci-token/' /etc/tailcove-agent.json
-          rpm -U --nodeps --replacepkgs packages/tailcove-agent-*.x86_64.rpm
+          rpm -U --nodeps --nosignature --replacepkgs packages/tailcove-agent-*.x86_64.rpm
           grep -q ci-token /etc/tailcove-agent.json
       - name: Remove
         run: |

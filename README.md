@@ -36,7 +36,7 @@ your token in `/etc/tailcove-agent.json` and start the service:
 # Debian, Ubuntu
 sudo apt install ./tailcove-agent_<version>_amd64.deb
 # Fedora, RHEL and compatibles, openSUSE
-sudo dnf install ./tailcove-agent-<version>-1.x86_64.rpm     # or: sudo rpm -i ...
+sudo dnf install ./tailcove-agent-<version>-1.x86_64.rpm     # or: sudo rpm -i --nosignature ...
 sudo systemctl enable --now tailcove-agent
 ```
 
