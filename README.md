@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://tailcove.dev/docs/sending-logs/agent">Documentation</a> &nbsp;·&nbsp;
-  <a href="https://app.tailcove.dev/register">Get started free</a> &nbsp;·&nbsp;
+  <a href="https://tailcove.dev/register">Get started free</a> &nbsp;·&nbsp;
   <a href="https://github.com/tailcove/agent/releases">View releases</a> &nbsp;·&nbsp;
   <a href="https://github.com/tailcove/agent/issues/new/choose">Report a bug</a>
 </p>
@@ -214,7 +214,7 @@ builds for every target, and runs the same package installs on every change.
 
 <p align="center">
   <a href="https://tailcove.dev/docs/sending-logs/agent">Documentation</a> &nbsp;·&nbsp;
-  <a href="https://app.tailcove.dev/register">Get started free</a> &nbsp;·&nbsp;
+  <a href="https://tailcove.dev/register">Get started free</a> &nbsp;·&nbsp;
   <a href="https://github.com/tailcove/agent/issues/new/choose">Report a bug</a> &nbsp;·&nbsp;
   <a href="LICENSE">MIT License</a>
 </p>
